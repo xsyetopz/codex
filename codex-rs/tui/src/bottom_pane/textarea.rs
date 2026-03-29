@@ -16,6 +16,7 @@ use codex_protocol::user_input::TextElement as UserTextElement;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
+use crossterm::event::KeyEventState;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -311,14 +312,17 @@ impl TextArea {
             KeyEvent { code: KeyCode::Char('\u{000e}'), modifiers: KeyModifiers::NONE, .. } /* ^N */ => {
                 self.move_cursor_down();
             }
-            KeyEvent {
+            event @ KeyEvent {
                 code: KeyCode::Char(c),
                 // Insert plain characters (and Shift-modified). Do NOT insert when ALT is held,
                 // because many terminals map Option/Meta combos to ALT+<char> (e.g. ESC f/ESC b)
                 // for word navigation. Those are handled explicitly below.
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
                 ..
-            } => self.insert_str(&c.to_string()),
+            } => {
+                let c = apply_letter_case_from_modifiers(c, event.modifiers, event.state);
+                self.insert_str(&c.to_string());
+            }
             KeyEvent {
                 code: KeyCode::Char('j' | 'm'),
                 modifiers: KeyModifiers::CONTROL,
@@ -1411,6 +1415,30 @@ impl TextArea {
     }
 }
 
+fn apply_letter_case_from_modifiers(
+    c: char,
+    modifiers: KeyModifiers,
+    state: KeyEventState,
+) -> char {
+    // When keyboard enhancement flags are enabled (kitty keyboard protocol),
+    // some terminals report the base key (e.g. 'a') plus modifier/state flags,
+    // instead of the "typed" character (e.g. 'A' when Shift or CapsLock is active).
+    //
+    // For letters, we can recover correct case from Shift/CapsLock without needing
+    // keyboard-layout specific mappings.
+    if !c.is_ascii_lowercase() {
+        return c;
+    }
+
+    let shift = modifiers.contains(KeyModifiers::SHIFT);
+    let caps_lock = state.contains(KeyEventState::CAPS_LOCK);
+    if shift ^ caps_lock {
+        c.to_ascii_uppercase()
+    } else {
+        c
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1506,6 +1534,40 @@ mod tests {
         t.replace_range(0..1, "AA");
         assert_eq!(t.text(), "AAbcd");
         assert_eq!(t.cursor(), 5);
+    }
+
+    #[test]
+    fn char_input_respects_shift_and_caps_lock_state_for_letters() {
+        let mut t = TextArea::new();
+
+        // Some terminals report the base key ('a') with Shift set.
+        t.input(KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        });
+        assert_eq!(t.text(), "A");
+
+        // With CapsLock state active and no shift, 'a' should become 'A'.
+        let mut t = TextArea::new();
+        t.input(KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::CAPS_LOCK,
+        });
+        assert_eq!(t.text(), "A");
+
+        // CapsLock + Shift toggles back to lowercase.
+        let mut t = TextArea::new();
+        t.input(KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::CAPS_LOCK,
+        });
+        assert_eq!(t.text(), "a");
     }
 
     #[test]

@@ -59,6 +59,18 @@ pub(crate) const TARGET_FRAME_INTERVAL: Duration = frame_rate_limiter::MIN_FRAME
 /// A type alias for the terminal type used in this application
 pub type Terminal = CustomTerminal<CrosstermBackend<Stdout>>;
 
+fn should_enable_keyboard_enhancement_flags() -> bool {
+    // VS Code's integrated terminal (xterm.js) currently has compatibility issues with
+    // crossterm's keyboard enhancement flags (kitty keyboard protocol). When enabled, users
+    // can lose Shift/CapsLock behavior and key repeat inside the prompt text box.
+    //
+    // Prefer working text entry over enhanced key disambiguation in this environment.
+    !matches!(
+        codex_terminal_detection::terminal_info().name,
+        codex_terminal_detection::TerminalName::VsCode
+    )
+}
+
 pub fn set_modes() -> Result<()> {
     execute!(stdout(), EnableBracketedPaste)?;
 
@@ -69,14 +81,16 @@ pub fn set_modes() -> Result<()> {
     // Some terminals (notably legacy Windows consoles) do not support
     // keyboard enhancement flags. Attempt to enable them, but continue
     // gracefully if unsupported.
-    let _ = execute!(
-        stdout(),
-        PushKeyboardEnhancementFlags(
-            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
-                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
-        )
-    );
+    if should_enable_keyboard_enhancement_flags() {
+        let _ = execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+            )
+        );
+    }
 
     let _ = execute!(stdout(), EnableFocusChange);
     Ok(())
@@ -264,7 +278,8 @@ impl Tui {
 
         // Detect keyboard enhancement support before any EventStream is created so the
         // crossterm poller can acquire its lock without contention.
-        let enhanced_keys_supported = supports_keyboard_enhancement().unwrap_or(false);
+        let enhanced_keys_supported = supports_keyboard_enhancement().unwrap_or(false)
+            && should_enable_keyboard_enhancement_flags();
         // Cache this to avoid contention with the event reader.
         supports_color::on_cached(supports_color::Stream::Stdout);
         let _ = crate::terminal_palette::default_colors();
