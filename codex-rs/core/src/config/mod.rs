@@ -62,6 +62,7 @@ use codex_model_provider_info::built_in_model_providers;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::config_types::HookReportLevel;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SandboxMode;
@@ -234,6 +235,12 @@ pub struct Config {
     /// suppressed from the frontend output. This can reduce visual noise when
     /// users are only interested in the final agent responses.
     pub hide_agent_reasoning: bool,
+
+    /// Controls how much hook execution detail is surfaced in user-facing outputs.
+    ///
+    /// This does **not** affect whether hooks run, nor whether hook-provided
+    /// additional context is injected into the model prompt.
+    pub hook_report_level: HookReportLevel,
 
     /// When set to `true`, `AgentReasoningRawContentEvent` events will be shown in the UI/output.
     /// Defaults to `false`.
@@ -1994,6 +2001,7 @@ impl Config {
             zsh_path,
 
             hide_agent_reasoning: cfg.hide_agent_reasoning.unwrap_or(false),
+            hook_report_level: cfg.hook_report_level.unwrap_or_default(),
             show_raw_agent_reasoning: cfg
                 .show_raw_agent_reasoning
                 .or(show_raw_agent_reasoning)

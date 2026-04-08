@@ -52,6 +52,42 @@ pub enum Verbosity {
     High,
 }
 
+/// Controls how much hook execution detail is surfaced in user-facing outputs.
+///
+/// This does **not** affect whether hooks run, nor whether hook-provided
+/// additional context is injected into the model prompt. It only controls
+/// whether hook start/completion notifications (and their output entries) are
+/// emitted to UI clients.
+#[derive(
+    Hash,
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    TS,
+    PartialOrd,
+    Ord,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum HookReportLevel {
+    /// Suppress all hook started/completed output.
+    Off,
+    /// Only show hook completions when the hook failed, blocked, or stopped.
+    Error,
+    /// Show actionable hook output, suppressing routine chatter.
+    #[default]
+    Warn,
+    /// Show all hook started/completed output (legacy behavior).
+    All,
+}
+
 #[derive(
     Deserialize, Debug, Clone, Copy, PartialEq, Default, Serialize, Display, JsonSchema, TS,
 )]

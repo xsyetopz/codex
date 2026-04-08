@@ -36,6 +36,7 @@ use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::config_types::HookReportLevel;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SandboxMode;
@@ -243,6 +244,11 @@ pub struct ConfigToml {
     /// When set to `true`, `AgentReasoning` events will be hidden from the
     /// UI/output. Defaults to `false`.
     pub hide_agent_reasoning: Option<bool>,
+
+    /// Controls how much hook execution detail is surfaced in user-facing outputs.
+    ///
+    /// Defaults to `warn`.
+    pub hook_report_level: Option<HookReportLevel>,
 
     /// When set to `true`, `AgentReasoningRawContentEvent` events will be shown in the UI/output.
     /// Defaults to `false`.

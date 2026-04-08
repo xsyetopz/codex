@@ -45,6 +45,7 @@ use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
+use codex_protocol::config_types::HookReportLevel;
 use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
@@ -4488,6 +4489,7 @@ fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
             js_repl_node_module_dirs: Vec::new(),
             zsh_path: None,
             hide_agent_reasoning: false,
+            hook_report_level: HookReportLevel::Warn,
             show_raw_agent_reasoning: false,
             model_reasoning_effort: Some(ReasoningEffort::High),
             plan_mode_reasoning_effort: None,
@@ -4633,6 +4635,7 @@ fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
         js_repl_node_module_dirs: Vec::new(),
         zsh_path: None,
         hide_agent_reasoning: false,
+        hook_report_level: HookReportLevel::Warn,
         show_raw_agent_reasoning: false,
         model_reasoning_effort: None,
         plan_mode_reasoning_effort: None,
@@ -4776,6 +4779,7 @@ fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
         js_repl_node_module_dirs: Vec::new(),
         zsh_path: None,
         hide_agent_reasoning: false,
+        hook_report_level: HookReportLevel::Warn,
         show_raw_agent_reasoning: false,
         model_reasoning_effort: None,
         plan_mode_reasoning_effort: None,
@@ -4905,6 +4909,7 @@ fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
         js_repl_node_module_dirs: Vec::new(),
         zsh_path: None,
         hide_agent_reasoning: false,
+        hook_report_level: HookReportLevel::Warn,
         show_raw_agent_reasoning: false,
         model_reasoning_effort: Some(ReasoningEffort::High),
         plan_mode_reasoning_effort: None,

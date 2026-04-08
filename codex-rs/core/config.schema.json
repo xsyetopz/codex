@@ -757,6 +757,39 @@
         }
       ]
     },
+    "HookReportLevel": {
+      "description": "Controls how much hook execution detail is surfaced in user-facing outputs.\n\nThis does **not** affect whether hooks run, nor whether hook-provided additional context is injected into the model prompt. It only controls whether hook start/completion notifications (and their output entries) are emitted to UI clients.",
+      "oneOf": [
+        {
+          "description": "Suppress all hook started/completed output.",
+          "enum": [
+            "off"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Only show hook completions when the hook failed, blocked, or stopped.",
+          "enum": [
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Show actionable hook output, suppressing routine chatter.",
+          "enum": [
+            "warn"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Show all hook started/completed output (legacy behavior).",
+          "enum": [
+            "all"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "McpServerToolConfig": {
       "additionalProperties": false,
       "description": "Per-tool approval settings for a single MCP server tool.",
@@ -2288,6 +2321,14 @@
       ],
       "default": null,
       "description": "Settings that govern if and what will be written to `~/.codex/history.jsonl`."
+    },
+    "hook_report_level": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/HookReportLevel"
+        }
+      ],
+      "description": "Controls how much hook execution detail is surfaced in user-facing outputs.\n\nDefaults to `warn`."
     },
     "include_apps_instructions": {
       "description": "Whether to inject the `<apps_instructions>` developer block.",

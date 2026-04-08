@@ -8,6 +8,7 @@ use codex_hooks::PreToolUseRequest;
 use codex_hooks::SessionStartOutcome;
 use codex_hooks::UserPromptSubmitOutcome;
 use codex_hooks::UserPromptSubmitRequest;
+use codex_protocol::config_types::HookReportLevel;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::DeveloperInstructions;
 use codex_protocol::models::ResponseInputItem;
@@ -15,6 +16,8 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::HookCompletedEvent;
+use codex_protocol::protocol::HookOutputEntryKind;
+use codex_protocol::protocol::HookRunStatus;
 use codex_protocol::protocol::HookRunSummary;
 use codex_protocol::protocol::HookStartedEvent;
 use codex_protocol::user_input::UserInput;
@@ -304,6 +307,9 @@ async fn emit_hook_started_events(
     turn_context: &Arc<TurnContext>,
     preview_runs: Vec<HookRunSummary>,
 ) {
+    if !should_emit_hook_started_event(turn_context.config.hook_report_level) {
+        return;
+    }
     for run in preview_runs {
         sess.send_event(
             turn_context,
@@ -321,9 +327,61 @@ async fn emit_hook_completed_events(
     turn_context: &Arc<TurnContext>,
     completed_events: Vec<HookCompletedEvent>,
 ) {
+    let report_level = turn_context.config.hook_report_level;
     for completed in completed_events {
-        sess.send_event(turn_context, EventMsg::HookCompleted(completed))
-            .await;
+        if let Some(completed) = filter_hook_completed_event(report_level, completed) {
+            sess.send_event(turn_context, EventMsg::HookCompleted(completed))
+                .await;
+        }
+    }
+}
+
+fn should_emit_hook_started_event(level: HookReportLevel) -> bool {
+    matches!(level, HookReportLevel::All)
+}
+
+fn filter_hook_completed_event(
+    level: HookReportLevel,
+    mut completed: HookCompletedEvent,
+) -> Option<HookCompletedEvent> {
+    let filtered_run = filter_hook_run_summary_for_report_level(level, completed.run)?;
+    completed.run = filtered_run;
+    Some(completed)
+}
+
+fn filter_hook_run_summary_for_report_level(
+    level: HookReportLevel,
+    mut run: HookRunSummary,
+) -> Option<HookRunSummary> {
+    match level {
+        HookReportLevel::Off => None,
+        HookReportLevel::All => Some(run),
+        HookReportLevel::Warn => {
+            run.entries
+                .retain(|entry| !matches!(entry.kind, HookOutputEntryKind::Context));
+            if run.status == HookRunStatus::Completed && run.entries.is_empty() {
+                None
+            } else {
+                Some(run)
+            }
+        }
+        HookReportLevel::Error => {
+            if !matches!(
+                run.status,
+                HookRunStatus::Failed | HookRunStatus::Blocked | HookRunStatus::Stopped
+            ) {
+                return None;
+            }
+            run.entries.retain(|entry| {
+                matches!(
+                    entry.kind,
+                    HookOutputEntryKind::Error
+                        | HookOutputEntryKind::Stop
+                        | HookOutputEntryKind::Feedback
+                )
+            });
+            Some(run)
+        }
     }
 }
 
@@ -340,10 +398,12 @@ fn hook_permission_mode(turn_context: &TurnContext) -> String {
 
 #[cfg(test)]
 mod tests {
+    use codex_protocol::config_types::HookReportLevel;
     use codex_protocol::models::ContentItem;
     use pretty_assertions::assert_eq;
 
     use super::additional_context_messages;
+    use super::filter_hook_run_summary_for_report_level;
 
     #[test]
     fn additional_context_messages_stay_separate_and_ordered() {
@@ -377,5 +437,102 @@ mod tests {
                 ("developer", "second tide note".to_string()),
             ],
         );
+    }
+
+    #[test]
+    fn hook_reporting_warn_suppresses_context_and_routine_completion() {
+        let run = hook_run_summary(
+            codex_protocol::protocol::HookRunStatus::Completed,
+            vec![codex_protocol::protocol::HookOutputEntry {
+                kind: codex_protocol::protocol::HookOutputEntryKind::Context,
+                text: "context only".to_string(),
+            }],
+        );
+        assert_eq!(
+            filter_hook_run_summary_for_report_level(HookReportLevel::Warn, run),
+            None
+        );
+
+        let run = hook_run_summary(
+            codex_protocol::protocol::HookRunStatus::Completed,
+            vec![
+                codex_protocol::protocol::HookOutputEntry {
+                    kind: codex_protocol::protocol::HookOutputEntryKind::Warning,
+                    text: "heads up".to_string(),
+                },
+                codex_protocol::protocol::HookOutputEntry {
+                    kind: codex_protocol::protocol::HookOutputEntryKind::Context,
+                    text: "context".to_string(),
+                },
+            ],
+        );
+        let filtered =
+            filter_hook_run_summary_for_report_level(HookReportLevel::Warn, run).expect("kept");
+        assert_eq!(filtered.entries.len(), 1);
+        assert_eq!(
+            filtered.entries[0].kind,
+            codex_protocol::protocol::HookOutputEntryKind::Warning
+        );
+    }
+
+    #[test]
+    fn hook_reporting_error_only_shows_fail_block_stop_and_filters_entries() {
+        let completed = hook_run_summary(
+            codex_protocol::protocol::HookRunStatus::Completed,
+            vec![codex_protocol::protocol::HookOutputEntry {
+                kind: codex_protocol::protocol::HookOutputEntryKind::Warning,
+                text: "heads up".to_string(),
+            }],
+        );
+        assert_eq!(
+            filter_hook_run_summary_for_report_level(HookReportLevel::Error, completed),
+            None
+        );
+
+        let blocked = hook_run_summary(
+            codex_protocol::protocol::HookRunStatus::Blocked,
+            vec![
+                codex_protocol::protocol::HookOutputEntry {
+                    kind: codex_protocol::protocol::HookOutputEntryKind::Warning,
+                    text: "warn".to_string(),
+                },
+                codex_protocol::protocol::HookOutputEntry {
+                    kind: codex_protocol::protocol::HookOutputEntryKind::Feedback,
+                    text: "feedback".to_string(),
+                },
+                codex_protocol::protocol::HookOutputEntry {
+                    kind: codex_protocol::protocol::HookOutputEntryKind::Context,
+                    text: "context".to_string(),
+                },
+            ],
+        );
+        let filtered = filter_hook_run_summary_for_report_level(HookReportLevel::Error, blocked)
+            .expect("kept");
+        assert_eq!(filtered.entries.len(), 1);
+        assert_eq!(
+            filtered.entries[0].kind,
+            codex_protocol::protocol::HookOutputEntryKind::Feedback
+        );
+    }
+
+    fn hook_run_summary(
+        status: codex_protocol::protocol::HookRunStatus,
+        entries: Vec<codex_protocol::protocol::HookOutputEntry>,
+    ) -> codex_protocol::protocol::HookRunSummary {
+        codex_protocol::protocol::HookRunSummary {
+            id: "hook-1".to_string(),
+            event_name: codex_protocol::protocol::HookEventName::PostToolUse,
+            handler_type: codex_protocol::protocol::HookHandlerType::Command,
+            execution_mode: codex_protocol::protocol::HookExecutionMode::Sync,
+            scope: codex_protocol::protocol::HookScope::Turn,
+            source_path: std::path::PathBuf::from("/tmp/hooks.json"),
+            display_order: 0,
+            status,
+            status_message: None,
+            started_at: 1,
+            completed_at: Some(2),
+            duration_ms: Some(1),
+            entries,
+        }
     }
 }
