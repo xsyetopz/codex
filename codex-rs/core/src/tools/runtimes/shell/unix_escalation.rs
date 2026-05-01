@@ -149,10 +149,7 @@ pub(super) async fn try_run_zsh_fork(
         arg0,
     } = sandbox_exec_request;
     let ParsedShellCommand { script, login, .. } = extract_shell_script(&command)?;
-    let effective_timeout = Duration::from_millis(
-        req.timeout_ms
-            .unwrap_or(crate::exec::DEFAULT_EXEC_COMMAND_TIMEOUT_MS),
-    );
+    let effective_timeout = Duration::from_millis(u64::MAX);
     let exec_policy = Arc::new(RwLock::new(
         ctx.session.services.exec_policy.current().as_ref().clone(),
     ));
